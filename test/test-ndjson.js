@@ -1,5 +1,9 @@
+const Request = require("mock-express-request");
+const Response = require("mock-express-response");
 const expect = require("expect.js");
+const sinon = require("sinon");
 const ndjson = require("..");
+const Type = require("../lib/type");
 
 describe("ndjson module", () => {
     it("should export the ndjson function", () => {
@@ -70,6 +74,28 @@ describe("ndjson(object)", () => {
             if (option === "documentHandler") return;
             expect(result[option]).to.be(ndjson.defaults[option]);
         });
+    });
+});
+
+describe("ndjson middleware", () => {
+    let middleware;
+
+    beforeEach(() => {
+        middleware = ndjson(documentHandler);
+    });
+
+    it("should send 415 response if content-type is not supported", async () => {
+        const req = new Request({headers: {"content-type": "text/x-foo"}});
+        const res = new Response({request: req});
+        const next = sinon.spy();
+
+        sinon.spy(res, "status");
+
+        await middleware(req, res, next);
+
+        expect(res.status.calledOnce).to.be(true);
+        expect(res.status.calledWith(415)).to.be(true);
+        expect(next.called).to.be(false);
     });
 });
 
