@@ -4,6 +4,7 @@ const expect = require("expect.js");
 const sinon = require("sinon");
 const ndjson = require("..");
 const Type = require("../lib/type");
+const pipe = require("./lib/pipe");
 
 describe("ndjson module", () => {
     it("should export the ndjson function", () => {
@@ -21,6 +22,7 @@ describe("ndjson module", () => {
 });
 
 describe("ndjson(function)", () => {
+    const documentHandler = () => {};
     let result;
 
     beforeEach(() => {
@@ -46,6 +48,8 @@ describe("ndjson(function)", () => {
 });
 
 describe("ndjson(object)", () => {
+    const documentHandler = () => {};
+    const errorHandler = () => {};
     const maxDocuments = 100;
     const maxSize = 3000;
     let result;
@@ -81,7 +85,7 @@ describe("ndjson middleware", () => {
     let middleware;
 
     beforeEach(() => {
-        middleware = ndjson(documentHandler);
+        middleware = ndjson(sinon.spy());
     });
 
     describe("client errors", () => {
@@ -105,7 +109,6 @@ describe("ndjson middleware", () => {
         let req, res, next;
 
         beforeEach(() => {
-            middleware.documentHandler = sinon.spy();
             req = new Request({headers: {"content-type": Type.json}});
             res = new Response({request: req});
             next = sinon.spy();
@@ -129,32 +132,37 @@ describe("ndjson middleware", () => {
         });
     });
 
-    it("should pass parsed JSON body to handler", async () => {
-        const req = new Request({headers: {"content-type": Type.json}});
-        const res = new Response({request: req});
-        const next = sinon.spy();
+    describe("with unparsed JSON body", () => {
+        const body = JSON.stringify({foo:13});
+        let req, res, next;
 
-        sinon.spy(res, "status");
-        req.body = {};
+        beforeEach(() => {
+            req = new Request({headers: {"content-type": Type.json}});
+            res = new Response({request: req});
+            next = sinon.spy();
+            sinon.spy(res, "status");
+            req.pipe = pipe(body);
+        });
 
-        await middleware(req, res, next);
+        it("should send 202 response", async () => {
+            await middleware(req, res, next);
 
-        expect(res.status.calledOnce).to.be(true);
-        expect(res.status.calledWith(202)).to.be(true);
-        expect(next.called).to.be(false);
-    });
+            expect(res.status.calledOnce).to.be(true);
+            expect(res.status.calledWith(202)).to.be(true);
+            expect(next.called).to.be(false);
+        });
 
-    it("should pass parsed JSON body to documentHandler", () => {
-        const req = new Request({headers: {"content-type": Type.json}});
-        const res = new Response({request: req});
-        const next = sinon.spy();
+        it("should pass body to documentHandler", async () => {
+            await middleware(req, res, next);
+
+            expect(middleware.documentHandler.calledOnce).to.be(true);
+
+            const call = middleware.documentHandler.args[0];
+            const arg = call[0];
+
+            expect(call.length).to.be(1);
+            expect(arg).to.be.an("object");
+            expect(JSON.stringify(arg)).to.be(body);
+        });
     });
 });
-
-function documentHandler(doc) {
-    // do nothing
-}
-
-function errorHandler(err) {
-    // do nothing
-}
