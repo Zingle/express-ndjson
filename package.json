@@ -1,0 +1,22 @@
+{
+  "name": "@zingle/express-ndjson",
+  "version": "0.0.1",
+  "description": "Express.js middleware to ingest NDJSON stream",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/Zingle/.git"
+  },
+  "author": "Richard Remer <reanjr@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Zingle/express-ndjson/issues"
+  },
+  "homepage": "https://github.com/Zingle/express-ndjson#readme",
+  "devDependencies": {
+    "expect.js": "^0.3.1",
+    "mocha": "^8.3.0"
+  }
+}
