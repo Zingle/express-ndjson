@@ -1,10 +1,10 @@
-const Request = require("mock-express-request");
-const Response = require("mock-express-response");
 const expect = require("expect.js");
 const sinon = require("sinon");
+const bodyParser = require("body-parser");
 const ndjson = require("..");
 const Type = require("../lib/type");
 const pipe = require("./lib/pipe");
+const {createExpressServer} = require("./lib/http");
 
 describe("ndjson module", () => {
     it("should export the ndjson function", () => {
@@ -82,87 +82,70 @@ describe("ndjson(object)", () => {
 });
 
 describe("ndjson middleware", () => {
-    let middleware;
+    let express, middleware;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         middleware = ndjson(sinon.spy());
+        express = createExpressServer();
+        await express.listen();
+    });
+
+    afterEach(() => {
+        express.close();
     });
 
     describe("client errors", () => {
-        it("should send 415 response if content-type is not supported", async () => {
-            const req = new Request({headers: {"content-type": "text/x-foo"}});
-            const res = new Response({request: req});
-            const next = sinon.spy();
-
-            sinon.spy(res, "status");
-
-            await middleware(req, res, next);
-
-            expect(res.status.calledOnce).to.be(true);
-            expect(res.status.calledWith(415)).to.be(true);
-            expect(next.called).to.be(false);
-        });
-    });
-
-    describe("with parsed JSON body", () => {
-        const body = JSON.stringify({foo:13});
-        let req, res, next;
-
         beforeEach(() => {
-            req = new Request({headers: {"content-type": Type.json}});
-            res = new Response({request: req});
-            next = sinon.spy();
-            req.body = JSON.parse(body);
-            sinon.spy(res, "status");
-        });
+            express.use(middleware);
+        })
 
-        it("should send 202 response", async () => {
-            await middleware(req, res, next);
-
-            expect(res.status.calledOnce).to.be(true);
-            expect(res.status.calledWith(202)).to.be(true);
-            expect(next.called).to.be(false);
-        });
-
-        it("should pass body to documentHandler", async () => {
-            await middleware(req, res, next);
-
-            expect(middleware.documentHandler.calledOnce).to.be(true);
-            expect(middleware.documentHandler.calledWith(req.body)).to.be(true);
+        it("should send 415 response when content-type is unsupported", async () => {
+            const headers = {"content-type": Type.text};
+            const res = await express.fetch("/", {headers});
+            expect(res.status).to.be(415);
         });
     });
 
     describe("with unparsed JSON body", () => {
+        const method = "PUT";
+        const headers = {"content-type": Type.json};
         const body = JSON.stringify({foo:13});
-        let req, res, next;
+        let res;
 
-        beforeEach(() => {
-            req = new Request({headers: {"content-type": Type.json}});
-            res = new Response({request: req});
-            next = sinon.spy();
-            sinon.spy(res, "status");
-            req.pipe = pipe(body);
+        beforeEach(async () => {
+            express.use(middleware);
+            res = await express.fetch("/", {method, headers, body});
         });
 
         it("should send 202 response", async () => {
-            await middleware(req, res, next);
-
-            expect(res.status.calledOnce).to.be(true);
-            expect(res.status.calledWith(202)).to.be(true);
-            expect(next.called).to.be(false);
+            expect(res.status).to.be(202);
         });
 
         it("should pass body to documentHandler", async () => {
-            await middleware(req, res, next);
-
             expect(middleware.documentHandler.calledOnce).to.be(true);
+            expect(JSON.stringify(middleware.documentHandler.args[0][0])).to.be(body);
+        });
+    });
 
-            const call = middleware.documentHandler.args[0];
-            const arg = call[0];
+    describe("with parsed JSON body", () => {
+        const method = "PUT";
+        const headers = {"content-type": Type.json};
+        const body = JSON.stringify({foo:13});
+        let res;
 
-            expect(call.length).to.be(1);
-            expect(arg).to.be.an("object");
-            expect(JSON.stringify(arg)).to.be(body);
+        beforeEach(async () => {
+            express.use(bodyParser.json());
+            express.use(middleware);
+            res = await express.fetch("/", {method, headers, body});
+        });
+
+        it("should send 202 response", async () => {
+            expect(res.status).to.be(202);
+        });
+
+        it("should pass body to documentHandler", async () => {
+            expect(middleware.documentHandler.calledOnce).to.be(true);
+            expect(JSON.stringify(middleware.documentHandler.args[0][0])).to.be(body);
         });
     });
 });
