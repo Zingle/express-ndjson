@@ -1,9 +1,9 @@
+const {Transform} = require("stream");
 const expect = require("expect.js");
 const sinon = require("sinon");
 const bodyParser = require("body-parser");
 const ndjson = require("..");
 const Type = require("../lib/type");
-const pipe = require("./lib/pipe");
 const {createExpressServer} = require("./lib/http");
 
 describe("ndjson module", () => {
@@ -146,6 +146,75 @@ describe("ndjson middleware", () => {
         it("should pass body to documentHandler", async () => {
             expect(middleware.documentHandler.calledOnce).to.be(true);
             expect(JSON.stringify(middleware.documentHandler.args[0][0])).to.be(body);
+        });
+    });
+
+    describe("with ND-JSON stream", () => {
+        const method = "POST";
+        const headers = {"content-type": Type.ndjson};
+        const bodyA = JSON.stringify({A:"foo"});
+        const bodyB = JSON.stringify({B:"foo"});
+        const bodyC = JSON.stringify({C:"foo"});
+
+        beforeEach(async () => {
+            express.use(middleware);
+        });
+
+        it("should send 202 response", async () => {
+            const body = [bodyA, bodyB, bodyC].map(s => s + "\n").join("");
+            const res = await express.fetch("/", {method, headers, body});
+            expect(res.status).to.be(202);
+        });
+
+        it("should pass each body to documentHandler", async () => {
+            const body = [bodyA, bodyB, bodyC].map(s => s + "\n").join("");
+            const res = await express.fetch("/", {method, headers, body});
+            expect(middleware.documentHandler.calledThrice).to.be(true);
+            expect(JSON.stringify(middleware.documentHandler.args[0][0])).to.be(bodyA);
+            expect(JSON.stringify(middleware.documentHandler.args[1][0])).to.be(bodyB);
+            expect(JSON.stringify(middleware.documentHandler.args[2][0])).to.be(bodyC);
+        });
+
+        it("should support streaming requests", async () => {
+            const body = new Transform({transform(c,e,f) {this.push(c); f();}});
+            const req = express.fetch("/", {method, headers, body});
+
+            // iterate over bodies, testing each one before continuing
+            for (const docBody of [bodyA, bodyB, bodyC]) {
+                // wrap up middleware handlers in Promise of next doc result
+                const doc = new Promise((documentHandler, errorHandler) => {
+                    Object.assign(middleware, {documentHandler, errorHandler});
+                });
+
+                // now write document, which should resolve doc above
+                body.write(docBody + "\n");
+
+                // check resolved doc against expected result
+                expect(JSON.stringify(await doc)).to.be(docBody);
+            }
+
+            body.end();
+        });
+
+        it("should send summary of results on success", async () => {
+            const body = [bodyA, bodyB, bodyC].map(s => s + "\n").join("");
+            const res = await express.fetch("/", {method, headers, body});
+            const summary = await res.json();
+
+            expect(summary).to.be.an("object");
+            expect(summary.accepted).to.be(3);
+            expect(summary.rejected).to.be(0);
+        });
+
+        it("should send summary of results on failure", async () => {
+            const body = [bodyA, bodyB, bodyC.slice(1,-1)].map(s => s + "\n").join("");
+            const res = await express.fetch("/", {method, headers, body});
+            const summary = await res.json();
+
+            expect(summary).to.be.an("object");
+            expect(summary.accepted).to.be(2);
+            expect(summary.rejected).to.be(1);
+            expect(summary.error).to.be.ok();
         });
     });
 });

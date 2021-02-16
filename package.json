@@ -24,6 +24,7 @@
     "sinon": "^9.2.4"
   },
   "dependencies": {
+    "@zingle/ndjson": "0.0.1",
     "stream-size": "0.0.6"
   }
 }
