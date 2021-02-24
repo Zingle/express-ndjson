@@ -2,7 +2,7 @@
   "name": "@zingle/express-ndjson",
   "version": "0.0.1",
   "description": "Express.js middleware to ingest NDJSON stream",
-  "types": ["./types/*", "./types/**/*"],
+  "types": "./types/index.d.ts",
   "scripts": {
     "test": "mocha"
   },
